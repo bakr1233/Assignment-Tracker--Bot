@@ -131,11 +131,12 @@ You'll see what it found, and the sheet fills in.
 ./install_schedule.sh
 ```
 
-Runs every hour from 7 AM to 11 PM, daily, with no window. Hourly rather than
-once a day because rows only move when the bot runs — "due within 7 days",
-"gone a day after the deadline" and "gone 30 minutes after you tick it off"
-are only true if something is running. Edit the hour list in that script to
-change it.
+Runs **every hour, around the clock**, with no window. Hourly rather than once
+a day because rows only move when the bot runs — "due within 7 days", "gone a
+day after the deadline" and "gone 30 minutes after you tick it off" are only
+true if something is running, including overnight when coursework often gets
+finished. If the Mac is asleep, launchd runs the job once it wakes. Edit the
+hour list in that script to run less often.
 
 ```sh
 launchctl kickstart -k "gui/$UID/com.assignmentbot.tracker"   # run it now

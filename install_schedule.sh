@@ -25,12 +25,20 @@ cat > "$PLIST" <<PLIST
   <key>WorkingDirectory</key>
   <string>$DIR</string>
 
-  <!-- Every hour from 07:00 to 23:00, every day. Hourly rather than a few
-       times a week because rows only appear and disappear when the bot runs:
-       "due within 7 days", "gone 1 day after it was due" and "gone 30 minutes
-       after you tick it off" are only true if something is actually running. -->
+  <!-- Every hour, around the clock. Rows only appear and disappear when the
+       bot runs, so "due within 7 days", "gone a day after it was due" and
+       "gone 30 minutes after you tick it off" are only true if something is
+       actually running - including at 1 AM, when coursework often gets
+       finished. If the Mac is asleep, launchd runs the job once it wakes. -->
   <key>StartCalendarInterval</key>
   <array>
+    <dict><key>Hour</key><integer>0</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>1</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>2</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>5</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
     <dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
     <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
     <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
@@ -72,7 +80,7 @@ fi
 echo "Installed: $PLIST"
 echo
 if launchctl print "gui/$UID/$LABEL" >/dev/null 2>&1; then
-  echo "The schedule is active: every hour from 7 AM to 11 PM, daily."
+  echo "The schedule is active: every hour, around the clock."
 else
   echo "Warning: launchd did not report the job as loaded. Check with:"
   echo "  launchctl print gui/$UID/$LABEL"
