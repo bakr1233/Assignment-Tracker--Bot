@@ -1,0 +1,10 @@
+credentials/*.txt
+!credentials/*.example.txt
+config.json
+.venv/
+logs/
+state/
+browser_profiles/
+debug/
+__pycache__/
+*.pyc

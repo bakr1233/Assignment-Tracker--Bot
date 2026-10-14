@@ -1,0 +1,43 @@
+{
+  "sheet_url": "",
+  "sheet_link": "",
+  "shared_secret": "CHANGE_ME_TO_A_LONG_RANDOM_STRING",
+  "timezone": "America/Chicago",
+  "lookahead_days": 60,
+  "lookback_days": 7,
+  "sheet_tab": "Bot Assignments",
+  "data_tab": "Bot Data",
+  "adopt_existing_tab": false,
+  "display_within_days": 7,
+  "overdue_grace_days": 1,
+  "done_linger_minutes": 30,
+  "notify_within_days": 2,
+  "push": {
+    "enabled": false,
+    "server": "https://ntfy.sh",
+    "topic": ""
+  },
+  "filters": {
+    "include_undated": false,
+    "include_completed_past": false
+  },
+  "browser": {
+    "duo_wait_seconds": 180,
+    "slow_mo_ms": 0
+  },
+  "sources": {
+    "blackboard": {
+      "enabled": true,
+      "base_url": ""
+    },
+    "canvas": {
+      "enabled": true
+    },
+    "gradescope": {
+      "enabled": true
+    },
+    "pearson": {
+      "enabled": true
+    }
+  }
+}
