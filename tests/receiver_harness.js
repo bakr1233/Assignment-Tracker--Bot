@@ -237,6 +237,7 @@ const DATA = 'Bot Data';
 const V = sandbox.V;
 const D = sandbox.D;
 const FIRST = sandbox.FIRST_DATA_ROW;
+const STATUS_LIST = sandbox.STATUS_CHOICES;
 
 let failures = 0;
 function check(label, condition, detail) {
@@ -519,6 +520,29 @@ check('no rebuild announced', !/Rebuilt/.test((appended.notes || []).join(' ')),
 check('the existing row survived',
   sheets[DATA]._dump().slice(1).some((r) => r[D.assignment - 1] === 'Keep me'),
   'an append wrongly wiped the store');
+
+console.log('\n--- junk in the Status cell is not treated as your choice ---');
+send([item('jk1', 'MATH 218', 'Homework 4', 5, { day: '20' })], { adopt: true });
+const jkRow = viewRows().findIndex((r) => r[V.assignment - 1] === 'Homework 4');
+sheets[VIEW].getRange(FIRST + jkRow, V.status).setValue('20');   // a points value
+send([item('jk1', 'MATH 218', 'Homework 4', 5, { day: '20' })], { adopt: true });
+
+const jk = viewRows().find((r) => r[V.assignment - 1] === 'Homework 4');
+check('the junk did not stick', jk[V.status - 1] !== '20', JSON.stringify(jk));
+check('it fell back to a real status',
+  STATUS_LIST.indexOf(String(jk[V.status - 1])) !== -1, String(jk[V.status - 1]));
+check('and it was not saved to the store',
+  !sheets[DATA]._dump().slice(1).some(
+    (r) => r[D.assignment - 1] === 'Homework 4' && String(r[D.yourStatus - 1]) === '20'),
+  'junk reached Your status');
+
+console.log('\n--- a real status still counts ---');
+const okRow = viewRows().findIndex((r) => r[V.assignment - 1] === 'Homework 4');
+sheets[VIEW].getRange(FIRST + okRow, V.status).setValue('In progress');
+send([item('jk1', 'MATH 218', 'Homework 4', 5, { day: '20' })], { adopt: true });
+check('your real edit is kept',
+  viewRows().find((r) => r[V.assignment - 1] === 'Homework 4')[V.status - 1] === 'In progress',
+  JSON.stringify(viewRows().find((r) => r[V.assignment - 1] === 'Homework 4')));
 
 console.log('\n--- malformed input ---');
 check('empty items ok', send([], { adopt: true }).ok === true);

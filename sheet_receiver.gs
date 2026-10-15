@@ -441,6 +441,14 @@ function readYourStatuses(sheet) {
     }
     var shown = String(rows[i][V.status - 1] || '').trim();
     var written = String(rows[i][V.written - 1] || '').trim();
+
+    // Only a real status counts as something you chose. A bug once put a
+    // points value - "20" - in this column; without this check the next run
+    // read it as a deliberate edit, copied it into the store, and it stuck.
+    if (STATUS_CHOICES.indexOf(shown) === -1) {
+      continue;
+    }
+
     if (shown && shown !== written) {
       yours[key] = shown;
     }
