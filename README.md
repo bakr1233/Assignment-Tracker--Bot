@@ -193,6 +193,8 @@ widening any of these brings rows straight back.
 | `timezone` | `America/Chicago` | how due times are interpreted |
 | `sources.<name>.enabled` | `true` | turn a source off |
 | `sources.blackboard.base_url` | — | **required** for Blackboard |
+| `sources.<name>.mode` | `live` | `snapshot` replays a stored capture instead of visiting the site |
+| `snapshot_stale_days` | 45 | warn when a stored capture is older than this |
 | `sources.gradescope.terms` | `current` | `all` includes past terms |
 | `push.enabled` / `push.topic` | `false` / — | phone notifications |
 
@@ -205,13 +207,28 @@ widening any of these brings rows straight back.
 | **Canvas** | official REST API, via a token or a browser session | solid |
 | **Gradescope** | form login and HTML parsing, no browser | solid, and fast |
 | **Blackboard** | browser sign-in, then Blackboard's internal JSON endpoints | good, but those endpoints aren't a published API and differ by version |
-| **Pearson** | browser, then reads the MyLab assignment table | works, but its session is short-lived and sign-in can show a CAPTCHA |
+| **Pearson** | browser, then reads the MyLab assignment table | works, but its session is short-lived and sign-in can show a CAPTCHA — capture it once with `--snapshot` instead |
 
-**Pearson needs a hand now and then.** When its session lapses the sign-in may
-serve an image CAPTCHA, which an unattended run has no honest way to answer.
-The run skips Pearson, still writes the other three, and notifies you once.
-Run `./run_visible.command`, solve it, and the session is reused until it
-expires again.
+**Pearson is better captured once than scraped hourly.** Its session lapses
+daily and the sign-in can serve an image CAPTCHA, which an unattended run has
+no honest way to answer — and a semester's MyLab homework is set before term
+starts and barely moves. So capture it once and replay it:
+
+```sh
+./.venv/bin/python -m bot.main --snapshot pearson
+```
+
+A browser opens; sign in (solving the CAPTCHA if asked) and the assignments
+are stored in `state/snapshots/`. Then set `sources.pearson.mode` to
+`"snapshot"` in `config.json`, and every run afterwards reads the file — no
+browser, no sign-in, no interruption. Due dates are re-read each run, so the
+countdowns stay accurate.
+
+Refresh it if the syllabus changes. The bot warns once a snapshot is older
+than `snapshot_stale_days` (45).
+
+Snapshot mode works for any source — set `sources.<name>.mode` — but Pearson
+is the one that needs it.
 
 If a source comes back empty or wrong:
 
@@ -233,8 +250,9 @@ need to adjust the selectors for your school.
 ./.venv/bin/python -m bot.main --only canvas gradescope
 ./.venv/bin/python -m bot.main --test-sheet            # check the sheet link
 ./.venv/bin/python -m bot.main --test-push             # check phone notifications
+./.venv/bin/python -m bot.main --snapshot pearson      # capture a source to replay later
 ./.venv/bin/python -m bot.main --visible --debug-dump  # save pages into debug/
-./.venv/bin/python -m unittest discover -s tests       # 92 Python tests
+./.venv/bin/python -m unittest discover -s tests       # 102 Python tests
 node tests/receiver_harness.js                         # 49 checks on the sheet script
 node tests/cleanup_harness.js                          # 13 checks on the cleanup script
 ```
@@ -296,7 +314,7 @@ when the prompt offers it.
 | `config.json` | sheet URL, shared secret, settings — never committed |
 | `browser_profiles/` | saved sessions, including "remember this browser" |
 | `logs/` | one file per day, plus `scheduled.log` |
-| `state/` | what was found last run, and which failures were already reported |
+| `state/` | what was found last run, which failures were reported, and any snapshots |
 | `debug/` | only written by `--debug-dump` or when a source finds nothing |
 
 Your passwords sit in plain text in `credentials/`, which is what makes an
@@ -315,7 +333,8 @@ Canvas API token and leave the browser-login fields blank.
   is portable; you'd need to replace launchd and `osascript`.
 - **Blackboard uses internal endpoints**, not a published API. They work
   across the versions tested but may differ at your school.
-- **Pearson needs a periodic manual sign-in** because of the CAPTCHA.
+- **Pearson needs capturing with `--snapshot`** rather than hourly scraping,
+  because of its CAPTCHA and short session.
 - **Gradescope SSO isn't supported** — password login only.
 
 ## License

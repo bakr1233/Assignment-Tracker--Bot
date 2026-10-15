@@ -37,7 +37,9 @@
       "enabled": true
     },
     "pearson": {
-      "enabled": true
+      "enabled": true,
+      "mode": "live"
     }
-  }
+  },
+  "snapshot_stale_days": 45
 }

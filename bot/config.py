@@ -63,6 +63,11 @@ class Config:
         return (self.raw.get("sheet_link") or "").strip()
 
     @property
+    def snapshot_stale_days(self) -> int:
+        """Warn when a stored snapshot is older than this."""
+        return int(self.raw.get("snapshot_stale_days", 45))
+
+    @property
     def notify_within_days(self) -> int:
         """A scheduled run pushes a desktop notification about anything due
         inside this many days. Nothing imminent means no notification."""

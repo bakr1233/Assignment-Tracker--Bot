@@ -1039,3 +1039,99 @@ class PhonePush(unittest.TestCase):
         self.push.send(self._cfg(), "x", "y", priority="high", tags="warning")
         self.assertEqual(self.calls[0]["headers"]["Priority"], "high")
         self.assertEqual(self.calls[0]["headers"]["Tags"], "warning")
+
+
+class Snapshots(unittest.TestCase):
+    """A source captured once and replayed from disk, for sites not worth
+    signing into every hour."""
+
+    def setUp(self):
+        import tempfile
+
+        from bot import paths, snapshot
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self._original = paths.STATE
+        paths.STATE = Path(self._tmp.name)
+        snapshot.FOLDER = paths.STATE / "snapshots"
+        self.snapshot = snapshot
+        self.now = datetime.now(TZ)
+
+    def tearDown(self):
+        from bot import paths
+
+        paths.STATE = self._original
+        self.snapshot.FOLDER = self._original / "snapshots"
+        self._tmp.cleanup()
+
+    def _items(self):
+        return [
+            Assignment("Pearson", "Math 220", "Homework Sec 4.7",
+                       parse_due("2026-10-18T23:59:00-05:00", TZ), "", "", "https://x/1"),
+            Assignment("Pearson", "Math 220", "Homework Sec 5.2",
+                       parse_due("2026-10-25T23:59:00-05:00", TZ)),
+        ]
+
+    def test_round_trip_keeps_every_field(self):
+        self.snapshot.save("pearson", self._items(), TZ)
+        loaded, captured = self.snapshot.load("pearson", TZ)
+
+        self.assertEqual(len(loaded), 2)
+        self.assertEqual(loaded[0].title, "Homework Sec 4.7")
+        self.assertEqual(loaded[0].course, "Math 220")
+        self.assertEqual(loaded[0].url, "https://x/1")
+        self.assertEqual(loaded[0].due.strftime("%Y-%m-%d %H:%M"), "2026-10-18 23:59")
+        self.assertIsNotNone(captured)
+
+    def test_keys_survive_the_round_trip(self):
+        """The whole point: a replayed row must update the sheet row the live
+        scrape created, not add a second one."""
+        original = self._items()
+        self.snapshot.save("pearson", original, TZ)
+        loaded, _ = self.snapshot.load("pearson", TZ)
+        self.assertEqual([a.key for a in loaded], [a.key for a in original])
+
+    def test_countdowns_are_recomputed_not_stored(self):
+        # Saved days_left would go stale; due dates are re-parsed each load.
+        self.snapshot.save("pearson", self._items(), TZ)
+        loaded, _ = self.snapshot.load("pearson", TZ)
+        expected = days_until(parse_due("2026-10-18T23:59:00-05:00", TZ))
+        self.assertEqual(loaded[0].days_left(), expected)
+
+    def test_missing_snapshot_is_empty_not_an_error(self):
+        loaded, captured = self.snapshot.load("nothing-here", TZ)
+        self.assertEqual(loaded, [])
+        self.assertIsNone(captured)
+
+    def test_corrupt_snapshot_is_empty_not_an_error(self):
+        self.snapshot.FOLDER.mkdir(parents=True, exist_ok=True)
+        self.snapshot.path_for("broken").write_text("{ not json", encoding="utf-8")
+        self.assertEqual(self.snapshot.load("broken", TZ)[0], [])
+
+    def test_undated_items_survive(self):
+        self.snapshot.save("pearson", [Assignment("Pearson", "c", "no deadline")], TZ)
+        loaded, _ = self.snapshot.load("pearson", TZ)
+        self.assertIsNone(loaded[0].due)
+
+    def test_age_in_days(self):
+        self.assertEqual(self.snapshot.age_days(self.now - timedelta(days=50), TZ), 50)
+        self.assertIsNone(self.snapshot.age_days(None, TZ))
+
+    def test_saving_again_replaces_the_previous_capture(self):
+        self.snapshot.save("pearson", self._items(), TZ)
+        self.snapshot.save("pearson", [Assignment("Pearson", "c", "only one")], TZ)
+        loaded, _ = self.snapshot.load("pearson", TZ)
+        self.assertEqual([a.title for a in loaded], ["only one"])
+
+
+class SourceMode(unittest.TestCase):
+    def test_defaults_to_live(self):
+        from bot.sources import REGISTRY
+
+        self.assertEqual(REGISTRY["pearson"](CFG, visible=False).mode, "live")
+
+    def test_reads_the_configured_mode(self):
+        from bot.sources import REGISTRY
+
+        cfg = config.Config(raw=dict(CFG.raw, sources={"pearson": {"mode": "SNAPSHOT"}}))
+        self.assertEqual(REGISTRY["pearson"](cfg, visible=False).mode, "snapshot")

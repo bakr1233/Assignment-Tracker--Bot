@@ -16,7 +16,7 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 
-from . import browser, config, notify, paths, sheet, state
+from . import browser, config, notify, paths, sheet, snapshot, state
 from .models import Assignment
 from .sources import REGISTRY
 from .util import fmt_due_display, setup_logging, truncate
@@ -42,6 +42,9 @@ def main(argv: List[str] | None = None) -> int:
     log.info("")
     log.info("Assignment tracker  -  %s", datetime.now(cfg.tz).strftime("%a %d %b %Y, %H:%M"))
     log.info("=" * 72)
+
+    if args.snapshot:
+        return _capture_snapshot(args.snapshot, cfg, args, log)
 
     if args.test_push:
         return _test_push(cfg, log)
@@ -143,6 +146,31 @@ def _run_sources(cfg, args, log) -> Tuple[List[Assignment], List[Tuple[str, str]
             continue
 
         source = REGISTRY[name](cfg, args.visible)
+
+        if source.mode == "snapshot":
+            stored, captured = snapshot.load(name, cfg.tz)
+            if not stored:
+                log.info(
+                    "%-12s no snapshot yet - run: python -m bot.main --snapshot %s",
+                    name, name,
+                )
+                continue
+            age = snapshot.age_days(captured, cfg.tz)
+            log.info(
+                "%-12s %d from a snapshot%s",
+                name, len(stored),
+                f" taken {age} day(s) ago" if age is not None else "",
+            )
+            if age is not None and age > cfg.snapshot_stale_days:
+                log.warning(
+                    "   That snapshot is over %d days old. Refresh it with: "
+                    "python -m bot.main --snapshot %s",
+                    cfg.snapshot_stale_days, name,
+                )
+            collected.extend(stored)
+            state.clear_alert(name)
+            continue
+
         ok, why = source.ready()
         if not ok:
             log.info("%-12s skipped - %s", name, why)
@@ -353,6 +381,40 @@ def _set_sheet_url(url: str, log) -> int:
     return 0
 
 
+def _capture_snapshot(name: str, cfg, args, log) -> int:
+    """Visit a source once and store what it found, so later runs can replay
+    it without signing in."""
+    if name not in REGISTRY:
+        log.error("Unknown source %r - known: %s", name, ", ".join(REGISTRY))
+        return 1
+
+    # Capturing is the one time a human is expected to be present, so this
+    # always runs with a window: it is where you solve a CAPTCHA if asked.
+    source = REGISTRY[name](cfg, visible=True)
+    ok, why = source.ready()
+    if not ok:
+        log.error("Cannot capture %s - %s", name, why)
+        return 1
+
+    log.info("Capturing %s. A browser will open; sign in if it asks.", name)
+    try:
+        items = source.fetch()
+    except Exception as exc:  # noqa: BLE001
+        log.error("Capture failed: %s", _short(exc))
+        return 1
+
+    if not items:
+        log.error("Found nothing, so the existing snapshot was left alone.")
+        return 1
+
+    saved = snapshot.save(name, items, cfg.tz)
+    log.info("")
+    log.info("Stored %d assignment(s) in %s", saved, snapshot.path_for(name))
+    log.info("Set sources.%s.mode to \"snapshot\" in config.json to replay it.", name)
+    state.clear_alert(name)
+    return 0
+
+
 def _test_push(cfg, log) -> int:
     if not cfg.push_enabled:
         log.error("No push topic in config.json. See the Notifications section of README.md.")
@@ -409,6 +471,11 @@ def _parse_args(argv: List[str]) -> argparse.Namespace:
     )
     parser.add_argument("--dry-run", action="store_true", help="collect but do not touch the sheet")
     parser.add_argument("--test-sheet", action="store_true", help="check the sheet link and exit")
+    parser.add_argument(
+        "--snapshot",
+        metavar="SOURCE",
+        help="visit a source once and store it, so later runs replay it without signing in",
+    )
     parser.add_argument(
         "--test-push", action="store_true", help="send a test notification to your phone and exit"
     )

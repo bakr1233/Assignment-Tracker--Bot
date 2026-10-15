@@ -49,5 +49,11 @@ class Source:
         return self.cfg.source(self.name)
 
     @property
+    def mode(self) -> str:
+        """"live" asks the site every run; "snapshot" replays a capture from
+        disk, for sources not worth signing into hourly."""
+        return str(self.options().get("mode") or "live").lower()
+
+    @property
     def profile_name(self) -> str:
         return self.options().get("profile") or self.profile
