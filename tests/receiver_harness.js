@@ -494,6 +494,32 @@ check('back on the tracker',
   viewRows().some((r) => r[V.assignment - 1] === 'W8 Quiz'),
   viewRows().map((r) => r[V.assignment - 1]).join(' | '));
 
+console.log('\n--- a moved column rebuilds the store instead of misreading it ---');
+// Inserting 'Your status' mid-schema once shifted every stored row by one, and
+// Points surfaced as a Status on the tracker.
+const DH = sandbox.DATA_HEADERS;
+const shifted = DH.slice(0, 9).concat(['Points'], DH.slice(9, DH.length - 1));
+addSheet(DATA, [shifted, ['k1', '2026-10-18T23:59:00-05:00', 'c', 'MATH 220', 'Old row']]);
+const rebuilt = send([item('sc1', 'MATH 220', 'After rebuild', 3, { day: '18' })], { adopt: true });
+check('accepted', rebuilt.ok === true, JSON.stringify(rebuilt));
+check('said it rebuilt the store',
+  /Rebuilt/.test((rebuilt.notes || []).join(' ')), JSON.stringify(rebuilt.notes));
+check('the misaligned row is gone',
+  !sheets[DATA]._dump().slice(1).some((r) => r[D.assignment - 1] === 'Old row'),
+  'a row with the old column layout survived');
+check('header is the current schema',
+  sheets[DATA]._dump()[0].join('|') === DH.join('|'), sheets[DATA]._dump()[0].join('|'));
+
+console.log('\n--- appending a column keeps the rows ---');
+const narrower = DH.slice(0, DH.length - 1);
+addSheet(DATA, [narrower, ['k9', '2026-10-18T23:59:00-05:00', 'c', 'CS 277', 'Keep me']]);
+const appended = send([item('sc2', 'CS 277', 'Another', 3, { day: '18' })], { adopt: true });
+check('no rebuild announced', !/Rebuilt/.test((appended.notes || []).join(' ')),
+  JSON.stringify(appended.notes));
+check('the existing row survived',
+  sheets[DATA]._dump().slice(1).some((r) => r[D.assignment - 1] === 'Keep me'),
+  'an append wrongly wiped the store');
+
 console.log('\n--- malformed input ---');
 check('empty items ok', send([], { adopt: true }).ok === true);
 check('item without a key skipped', send([{ title: 'x' }], { adopt: true }).added === 0);

@@ -148,7 +148,7 @@ function doPost(e) {
 
 /* ------------------------------------------------------------------- owning */
 
-function ownedTab(ss, tabName, headerRow, headers, markers, adopt, notes) {
+function ownedTab(ss, tabName, headerRow, headers, markers, adopt, notes, rebuildable) {
   var sheet = ss.getSheetByName(tabName);
 
   if (!sheet) {
@@ -163,7 +163,20 @@ function ownedTab(ss, tabName, headerRow, headers, markers, adopt, notes) {
   }
 
   if (isOurs(sheet, headerRow, headers, markers)) {
-    // Rewrite the header row so a column added in a later version appears.
+    var change = headerChange(sheet, headerRow, headers);
+
+    if (change === 'reordered' && rebuildable) {
+      // The column layout moved between versions, so every stored row is now
+      // offset against it - Points would be read as Your status, and so on.
+      // This tab is derived; one run rebuilds it. Far better than writing
+      // rows whose columns no longer mean what the header says.
+      resetSheet(sheet, headerRow, headers);
+      notes.push('Rebuilt "' + tabName + '": its columns changed in this version.');
+      return sheet;
+    }
+
+    // Unchanged, or columns only appended on the right: the existing rows
+    // still line up, so just refresh the header.
     sheet.getRange(headerRow, 1, 1, headers.length).setValues([headers]);
     return sheet;
   }
@@ -222,6 +235,28 @@ function isOurs(sheet, headerRow, headers, markers) {
   return true;
 }
 
+/**
+ * 'same', 'appended' (columns only added on the right, so existing rows still
+ * line up) or 'reordered' (a column moved or was inserted, so they do not).
+ *
+ * Adding 'Your status' in the middle once shifted every stored row by one
+ * column: Points surfaced as a status on the tracker. New columns go on the
+ * end; this is what notices when they have not.
+ */
+function headerChange(sheet, headerRow, headers) {
+  var existing = sheet.getRange(headerRow, 1, 1, headers.length).getValues()[0];
+  for (var i = 0; i < headers.length; i++) {
+    var was = String(existing[i] || '').trim();
+    if (was === '') {
+      return 'appended';
+    }
+    if (was !== headers[i]) {
+      return 'reordered';
+    }
+  }
+  return 'same';
+}
+
 function resetSheet(sheet, headerRow, headers) {
   sheet.clear();
   try {
@@ -255,8 +290,12 @@ function upsert(ss, viewName, dataName, body) {
   var lingerMs = (body.done_linger_minutes === undefined ? 30 : Number(body.done_linger_minutes))
     * 60 * 1000;
 
-  var dataSheet = ownedTab(ss, dataName, 1, DATA_HEADERS, DATA_MARKERS, false, notes);
-  var viewSheet = ownedTab(ss, viewName, HEAD_ROW, VIEW_HEADERS, VIEW_MARKERS, !!body.adopt, notes);
+  // The store is derived from the sources, so it is safe to rebuild if this
+  // version moved its columns. The view is rebuilt every run regardless.
+  var dataSheet = ownedTab(ss, dataName, 1, DATA_HEADERS, DATA_MARKERS, false, notes, true);
+  var viewSheet = ownedTab(
+    ss, viewName, HEAD_ROW, VIEW_HEADERS, VIEW_MARKERS, !!body.adopt, notes, false
+  );
 
   var yours = readYourStatuses(viewSheet);
   var result = writeStore(dataSheet, items, yours);
