@@ -178,6 +178,13 @@ Past work you *never* handed in stays, because that's the case worth seeing.
 Nothing is ever deleted — `Bot Data` keeps every assignment it has seen, so
 widening any of these brings rows straight back.
 
+**Your Status edits are kept in `Bot Data`**, in a `Your status` column, not
+only on the tracker. The tracker row is what gets removed, so storing the edit
+only there would throw it away — and the next run, seeing a source that
+reports no status (Blackboard and Pearson report none), would call the work
+unfinished and put it back as "Not started". To bring a finished assignment
+back, clear its `Your status` and `Done at` cells in `Bot Data`.
+
 ### Settings (`config.json`)
 
 | Key | Default | Does |
