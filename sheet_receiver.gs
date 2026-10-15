@@ -34,14 +34,14 @@ var SHARED_SECRET = 'PASTE_THE_SECRET_FROM_config.json_HERE';
 
 var DATA_HEADERS = [
   'Key', 'Sort', 'Course', 'Subject', 'Assignment', 'Due', 'Due On',
-  'Days left', 'Bot status', 'Points', 'Source', 'Link', 'First seen', 'Last seen',
-  'Done at'
+  'Days left', 'Bot status', 'Your status', 'Points', 'Source', 'Link',
+  'First seen', 'Last seen', 'Done at'
 ];
 
 var D = {
   key: 1, sort: 2, course: 3, subject: 4, assignment: 5, due: 6, dueOn: 7,
-  daysLeft: 8, botStatus: 9, points: 10, source: 11, link: 12,
-  firstSeen: 13, lastSeen: 14, doneAt: 15
+  daysLeft: 8, botStatus: 9, yourStatus: 10, points: 11, source: 12, link: 13,
+  firstSeen: 14, lastSeen: 15, doneAt: 16
 };
 
 /** Header cells that prove a tab belongs to this script, as [index, text].
@@ -50,6 +50,11 @@ var D = {
 var DATA_MARKERS = [[0, 'Key'], [1, 'Sort']];
 
 var MEANINGFUL = [D.course, D.assignment, D.due, D.botStatus, D.points, D.source, D.link];
+
+/** Your Status edits are kept here, not only in the view.
+ *  Keeping them only in the view lost them the moment a finished row was
+ *  removed: the next run saw a source reporting no status, called it
+ *  unfinished, and put it back as "Not started". */
 var NO_DUE = '9999-12-31';
 
 /* -------------------------------------------------------------- the tracker */
@@ -310,7 +315,14 @@ function writeStore(sheet, items, yours) {
   // means it sees both what the sources reported and what you typed.
   for (var r = 0; r < block.length; r++) {
     var rowKey = String(block[r][D.key - 1] || '').trim();
-    var effective = (yours && yours[rowKey]) || block[r][D.botStatus - 1];
+
+    // An edit you made in the view is recorded here, so it outlives the row.
+    var typed = yours && yours[rowKey];
+    if (typed) {
+      block[r][D.yourStatus - 1] = typed;
+    }
+
+    var effective = block[r][D.yourStatus - 1] || block[r][D.botStatus - 1];
     if (isDone(effective)) {
       if (!asDate(block[r][D.doneAt - 1])) {
         block[r][D.doneAt - 1] = stamp;
@@ -361,6 +373,7 @@ function storeRow(before, item, stamp) {
   row[D.daysLeft - 1] = (item.days_left === undefined || item.days_left === null)
     ? '' : item.days_left;
   row[D.botStatus - 1] = item.done ? 'Done' : pick(item.status, before[D.botStatus - 1]);
+  row[D.yourStatus - 1] = before[D.yourStatus - 1] || '';
   row[D.points - 1] = pick(item.points, before[D.points - 1]);
   row[D.source - 1] = pick(item.source, before[D.source - 1]);
   row[D.link - 1] = pick(item.url, before[D.link - 1]);
@@ -442,8 +455,12 @@ function buildView(sheet, dataSheet, yours, withinDays, graceDays, lingerMs, ter
       botStatus = botStatus.toLowerCase() === 'done' ? 'Done' : DEFAULT_STATUS;
     }
 
+    // Your own edit wins, and it is remembered in the store, so a row you
+    // finished does not reappear once it has been removed from the view.
+    var stored = String(store[i][D.yourStatus - 1] || '').trim();
+
     // Finished work stays up briefly so you can see it tick over, then goes.
-    var status = yours[key] || botStatus;
+    var status = yours[key] || stored || botStatus;
     if (isDone(status)) {
       var doneAt = asDate(store[i][D.doneAt - 1]);
       if (doneAt && now.getTime() - doneAt.getTime() >= lingerMs) {

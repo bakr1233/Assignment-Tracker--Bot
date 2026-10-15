@@ -453,6 +453,47 @@ check('it stays on the tracker',
   viewRows().some((r) => r[V.assignment - 1] === 'Changed my mind'),
   viewRows().map((r) => r[V.assignment - 1]).join(' | '));
 
+console.log('\n--- a finished row must not come back (regression) ---');
+// The bug: your "Done" lived only in the view. Once the finished row was
+// removed, the next run saw a source reporting no status at all, decided the
+// work was unfinished, and put it back as "Not started".
+send([item('rb1', 'CS 277', 'W8 Quiz', 3, { day: '18' })], { adopt: true });
+let rbRow = viewRows().findIndex((r) => r[V.assignment - 1] === 'W8 Quiz');
+check('shown before you touch it', rbRow >= 0);
+
+sheets[VIEW].getRange(FIRST + rbRow, V.status).setValue('Done');
+send([item('rb1', 'CS 277', 'W8 Quiz', 3, { day: '18' })], { adopt: true });
+check('your Done is stored, not just displayed',
+  sheets[DATA]._dump().slice(1).some(
+    (r) => r[D.assignment - 1] === 'W8 Quiz' && String(r[D.yourStatus - 1]) === 'Done'),
+  'Your status column was not written');
+
+const rbLine = sheets[DATA]._dump().findIndex((r) => r[D.assignment - 1] === 'W8 Quiz') + 1;
+sheets[DATA].getRange(rbLine, D.doneAt).setValue(new Date(Date.now() - 31 * 60 * 1000));
+send([item('rb1', 'CS 277', 'W8 Quiz', 3, { day: '18' })], { adopt: true });
+check('gone after the linger',
+  !viewRows().some((r) => r[V.assignment - 1] === 'W8 Quiz'),
+  viewRows().map((r) => r[V.assignment - 1]).join(' | '));
+
+// The run that used to resurrect it.
+send([item('rb1', 'CS 277', 'W8 Quiz', 3, { day: '18' })], { adopt: true });
+check('STAYS gone on the next run',
+  !viewRows().some((r) => r[V.assignment - 1] === 'W8 Quiz'),
+  viewRows().map((r) => r[V.assignment - 1]).join(' | '));
+send([item('rb1', 'CS 277', 'W8 Quiz', 3, { day: '18' })], { adopt: true });
+check('and the one after that',
+  !viewRows().some((r) => r[V.assignment - 1] === 'W8 Quiz'),
+  viewRows().map((r) => r[V.assignment - 1]).join(' | '));
+
+console.log('\n--- clearing Your status in the store brings a row back ---');
+const rbLine2 = sheets[DATA]._dump().findIndex((r) => r[D.assignment - 1] === 'W8 Quiz') + 1;
+sheets[DATA].getRange(rbLine2, D.yourStatus).setValue('');
+sheets[DATA].getRange(rbLine2, D.doneAt).setValue('');
+send([item('rb1', 'CS 277', 'W8 Quiz', 3, { day: '18' })], { adopt: true });
+check('back on the tracker',
+  viewRows().some((r) => r[V.assignment - 1] === 'W8 Quiz'),
+  viewRows().map((r) => r[V.assignment - 1]).join(' | '));
+
 console.log('\n--- malformed input ---');
 check('empty items ok', send([], { adopt: true }).ok === true);
 check('item without a key skipped', send([{ title: 'x' }], { adopt: true }).added === 0);
